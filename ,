@@ -1,0 +1,18 @@
+pytorch3d
+tensorboardX~=2.4.1
+numpy>=1.16.2
+torch>=1.0.1.post2
+torchgeometry>=0.1.2
+pillow~=9.0.1
+tqdm
+Ninja
+trimesh~=3.10.0
+pyrender~=0.1.45
+PyYAML~=6.0
+smplx >=0.1.2
+git+git://github.com/otaheri/chamfer_distance.git
+git+git://github.com/otaheri/MANO.git
+git+git://github.com/otaheri/bps_torch.git
+git+git://github.com/MPI-IS/mesh.git
+
+opencv-python~=4.5.5.62
