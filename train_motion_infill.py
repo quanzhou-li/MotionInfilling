@@ -49,7 +49,7 @@ if __name__=='__main__':
 
     cfg = {
         'work_dir': work_dir,
-        'ds_train': 'train_data_s8',
+        'ds_train': 'train_data',
         'ds_val': 'val_data',
         'batch_size': batch_size,
         'n_workers': n_workers,

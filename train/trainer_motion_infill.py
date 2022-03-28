@@ -130,12 +130,12 @@ class Trainer:
         ### KL loss local
         q_z_local = torch.distributions.normal.Normal(drec['mean_local'], drec['std_local'])
         p_z_local = torch.distributions.normal.Normal(
-            loc=torch.tensor(np.zeros([self.cfg.batch_size, 1024]), requires_grad=False).to(
+            loc=torch.tensor(np.zeros(drec['mean_local'].shape), requires_grad=False).to(
                 self.device).type(self.dtype),
-            scale=torch.tensor(np.ones([self.cfg.batch_size, 1024]), requires_grad=False).to(
+            scale=torch.tensor(np.ones(drec['mean_local'].shape), requires_grad=False).to(
                 self.device).type(self.dtype)
         )
-        loss_kl_local = self.cfg.kl_coef * torch.mean(torch.sum(torch.distributions.kl.kl_divergence(q_z_local, p_z_local)))
+        loss_kl_local = 0.5 * self.cfg.kl_coef * torch.mean(torch.sum(torch.distributions.kl.kl_divergence(q_z_local, p_z_local)))
 
         loss_dict = {
             'loss_traj': loss_traj,
