@@ -112,7 +112,7 @@ class Trainer:
         v_drec = traj_drec[:, :-1, :] - traj_drec[:, 1:, :]
         loss_root_velocity = 90. * (1. - self.cfg.kl_coef) * self.LossL1(v_data, v_drec)
         ### marker loss
-        loss_marker = 150. * (1. - self.cfg.kl_coef) * self.LossL1(data['I'][:, 0, :-8, :], drec['I'][:, 0, :-8, :])
+        loss_marker = 200. * (1. - self.cfg.kl_coef) * self.LossL1(data['I'][:, 0, :-8, :], drec['I'][:, 0, :-8, :])
         ### marker velocity loss
         loss_m_velocity = 90. * (1. - self.cfg.kl_coef) * self.LossL1(data['I'][:, 1:, :, :], drec['I'][:, 1:, :, :])
         ### foot ground contact loss
@@ -135,7 +135,7 @@ class Trainer:
             scale=torch.tensor(np.ones(drec['mean_local'].shape), requires_grad=False).to(
                 self.device).type(self.dtype)
         )
-        loss_kl_local = 0.2 * self.cfg.kl_coef * torch.mean(torch.sum(torch.distributions.kl.kl_divergence(q_z_local, p_z_local)))
+        loss_kl_local = 0.1 * self.cfg.kl_coef * torch.mean(torch.sum(torch.distributions.kl.kl_divergence(q_z_local, p_z_local)))
 
         loss_dict = {
             'loss_traj': loss_traj,
