@@ -165,7 +165,7 @@ class TrajFill(nn.Module):
         z_s = Z.rsample()
 
         diff = self.decode(z_s, traj_cond)
-        return traj_cond + diff
+        return traj_cond + diff, Z.mean, Z.scale
 
 
 
@@ -316,7 +316,7 @@ class LocalMotionFill(nn.Module):
         x_up1 = self.dec_blc4(x_up2, X1.size())
         output = self.dec_blc5(x_up1, I.size())
 
-        return output
+        return output, Z.mean, Z.scale
 
 
 class MotionFill(nn.Module):
@@ -326,11 +326,15 @@ class MotionFill(nn.Module):
         self.localMotionNet = LocalMotionFill()
 
     def forward(self, I, I_cond, traj, traj_cond, **kwargs):
-        predict_traj = self.trajNet(traj, traj_cond)
-        predict_I = self.localMotionNet(I, I_cond)
+        predict_traj, mean_traj, std_traj = self.trajNet(traj, traj_cond)
+        predict_I, mean_local, std_local = self.localMotionNet(I, I_cond)
 
         return {
             'traj': predict_traj,
-            'I': predict_I
+            'I': predict_I,
+            'mean_traj': mean_traj,
+            'std_traj': std_traj,
+            'mean_local': mean_local,
+            'std_local': std_local
         }
 
