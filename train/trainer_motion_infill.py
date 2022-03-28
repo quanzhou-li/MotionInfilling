@@ -27,6 +27,7 @@ class Trainer:
         makepath(work_dir, isfile=False)
         logger = makelogger(makepath(os.path.join(work_dir, 'train_motion_infill.log'), isfile=True)).info
         self.logger = logger
+        self.dtype = torch.float32
 
         summary_logdir = os.path.join(work_dir, 'summaries')
         self.swriter = SummaryWriter(log_dir=summary_logdir)
@@ -117,12 +118,33 @@ class Trainer:
         ### foot ground contact loss
         loss_fg_contact = 60. * (1. - self.cfg.kl_coef) * self.bce_loss(data['I'][:, 0, -8:, :], drec['I'][:, 0, -8:, :])
 
+        ### KL loss traj
+        q_z_traj = torch.distributions.normal.Normal(drec['mean_traj'], drec['std_traj'])
+        p_z_traj = torch.distributions.normal.Normal(
+            loc=torch.tensor(np.zeros([self.cfg.batch_size, 512]), requires_grad=False).to(
+                self.device).type(self.dtype),
+            scale=torch.tensor(np.ones([self.cfg.batch_size, 512]), requires_grad=False).to(
+                self.device).type(self.dtype)
+        )
+        loss_kl_traj = self.cfg.kl_coef * torch.mean(torch.sum(torch.distributions.kl.kl_divergence(q_z_traj, p_z_traj)))
+        ### KL loss local
+        q_z_local = torch.distributions.normal.Normal(drec['mean_local'], drec['std_local'])
+        p_z_local = torch.distributions.normal.Normal(
+            loc=torch.tensor(np.zeros([self.cfg.batch_size, 1024]), requires_grad=False).to(
+                self.device).type(self.dtype),
+            scale=torch.tensor(np.ones([self.cfg.batch_size, 1024]), requires_grad=False).to(
+                self.device).type(self.dtype)
+        )
+        loss_kl_local = self.cfg.kl_coef * torch.mean(torch.sum(torch.distributions.kl.kl_divergence(q_z_local, p_z_local)))
+
         loss_dict = {
             'loss_traj': loss_traj,
             'loss_root_velocity': loss_root_velocity,
             'loss_marker': loss_marker,
             'loss_m_velocity': loss_m_velocity,
-            'loss_fg_contact': loss_fg_contact
+            'loss_fg_contact': loss_fg_contact,
+            'loss_kl_traj': loss_kl_traj,
+            'loss_kl_local': loss_kl_local
         }
 
         loss_total = torch.stack(list(loss_dict.values())).sum()

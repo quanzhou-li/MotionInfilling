@@ -29,7 +29,7 @@ if __name__=='__main__':
     parser.add_argument('--lr', default=5e-4, type=float,
                         help='Training learning rate')
 
-    parser.add_argument('--kl-coef', default=5e-3, type=float,
+    parser.add_argument('--kl-coef', default=1e-2, type=float,
                         help='KL divergence coefficent for GNet training')
 
     parser.add_argument('--use-multigpu', default=False,
