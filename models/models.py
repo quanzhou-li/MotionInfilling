@@ -177,8 +177,10 @@ class EncBlock(nn.Module):
 
         self.main = nn.Sequential(
             nn.Conv2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=1, padding=padding),
+            nn.BatchNorm2d(nout),
             nn.LeakyReLU(0.2),
             nn.Conv2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding),
+            nn.BatchNorm2d(nout),
             nn.LeakyReLU(0.2),
         )
 
@@ -206,10 +208,13 @@ class DecBlock(nn.Module):
         self.deconv2 = nn.ConvTranspose2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding)
         self.leaky_relu = nn.LeakyReLU(0.2)
 
+        self.BN1 = nn.BatchNorm2d(nout)
+        self.BN2 = nn.BatchNorm2d(nout)
+
     def forward(self, input, out_size):
         output = self.deconv1(input, output_size=out_size)
-        output = self.leaky_relu(output)
-        output = self.leaky_relu(self.deconv2(output))
+        output = self.leaky_relu(self.BN1(output))
+        output = self.leaky_relu(self.BN2(self.deconv2(output)))
         return output
 
 
@@ -226,10 +231,11 @@ class DecBlock_output(nn.Module):
         self.deconv2 = nn.ConvTranspose2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding)
         self.leaky_relu = nn.LeakyReLU(0.2)
 
+        self.BN = nn.BatchNorm2d(nout)
 
     def forward(self, input, out_size):
         output = self.deconv1(input, output_size=out_size)
-        output = self.leaky_relu(output)
+        output = self.leaky_relu(self.BN(output))
         output = self.deconv2(output)
         return output
 
@@ -254,6 +260,8 @@ class LocalMotionFill(nn.Module):
         self.conv_var = nn.Conv2d(512, 256, 3, 1, 1)
         self.conv_dec = nn.Conv2d(512, 256, 3, 1, 1)
 
+        self.BN = nn.BatchNorm2d(256)
+
     def decode(self, Zs, I_cond, **kwargs):
         X1 = self.enc_blc1(I_cond)
         X2 = self.enc_blc2(X1)
@@ -262,7 +270,7 @@ class LocalMotionFill(nn.Module):
         X5 = self.enc_blc5(X4)
 
         X = torch.cat([X5, Zs], dim=1)
-        X = self.conv_dec(X)
+        X = self.BN(self.conv_dec(X))
 
         x_up4 = self.dec_blc1(X, X4.size())
         x_up3 = self.dec_blc2(x_up4, X3.size())
@@ -294,7 +302,7 @@ class LocalMotionFill(nn.Module):
         z_s = Z.rsample()
 
         X = torch.cat([X_cond, z_s], dim=1)
-        X = self.conv_dec(X)
+        X = self.BN(self.conv_dec(X))
 
         x_up4 = self.dec_blc1(X, X4.size())
         x_up3 = self.dec_blc2(x_up4, X3.size())
