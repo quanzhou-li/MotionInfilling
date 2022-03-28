@@ -26,7 +26,7 @@ class ResBlock(nn.Module):
         self.bn1 = nn.BatchNorm1d(n_neurons)
 
         self.fc2 = nn.Linear(n_neurons, Fout)
-        self.bn2 = nn.BatchNorm1d(n_neurons)
+        self.bn2 = nn.BatchNorm1d(Fout)
 
         if Fin != Fout:
             self.fc3 = nn.Linear(Fin, Fout)
@@ -131,222 +131,192 @@ class GNet(nn.Module):
         return results
 
 
-class MNet(nn.Module):
-
+class TrajFill(nn.Module):
     def __init__(self,
-                 Fin=5*55*6+5*3+400*3+400*3+99*3+1024,
-                 Fout=10*55*9+10*99*3+10*3+10*400*3,
-                 n_neurons=1024,
+                 Fin=2*(151*3),
+                 Fout=151*3,
+                 featureD=151*4,
+                 n_hidden=151*4,
+                 latentD=512,
                  **kwargs):
-        super(MNet, self).__init__()
-        self.Fin = Fin
-        self.Fout = Fout
+        super(TrajFill, self).__init__()
 
-        self.rb1 = ResBlock(Fin, n_neurons, n_neurons=n_neurons)
-        self.rb2 = ResBlock(Fin + n_neurons, n_neurons, n_neurons=n_neurons)
+        self.rb1 = ResBlock(Fin, featureD, n_neurons=n_hidden)
+        self.rb2 = ResBlock(featureD, featureD, n_neurons=n_hidden)
+        self.enc_mu = nn.Linear(featureD, latentD)
+        self.enc_var = nn.Linear(featureD, latentD)
+        self.rb3 = ResBlock(latentD+Fout, Fout, n_neurons=Fout)
+        self.rb4 = ResBlock(Fout, Fout, n_neurons=Fout)
 
-        self.fc_pose = nn.Linear(n_neurons, 10 * 55 * 6)
-        self.fc_transl = nn.Linear(n_neurons, 10 * 3)
-        self.fc_verts = nn.Linear(n_neurons, 10 * 400 * 3)
-        self.fc_dist = nn.Linear(n_neurons, 10 * 99 * 3)
+    def encode(self, traj, traj_cond):
+        X = torch.cat([traj_cond, traj], dim=1)
+        X = self.rb1(X)
+        X = self.rb2(X)
+        return torch.distributions.normal.Normal(self.enc_mu(X), F.softplus(self.enc_var(X)))
 
-    def forward(self,
-                past_pose_rotmat,
-                past_transl,
-                cur_velocity,
-                cur_verts,
-                cur_dists_to_goal,
-                bps_goal,
-                **kwargs):
-        '''
-        :param past_pose_rotmat: N * 5 * 1 * 55 * 9
-        :param past_transl: N * 5 * 3
-        :param cur_velocity: N * 400 * 3
-        :param cur_verts: N * 400 * 3
-        :param cur_dists_to_goal: N * 99 * 3
-        :param bps_goal: N * 1 * 1024
-        :param kwargs:
-        :return:
-        '''
+    def decode(self, Zs, traj_cond):
+        X = torch.cat([Zs, traj_cond], dim=1)
+        X = self.rb3(X)
+        X = self.rb4(X)
+        return X
 
-        bs = past_pose_rotmat.shape[0]
+    def forward(self, traj, traj_cond, **kwargs):
+        Z = self.encode(traj, traj_cond)
+        z_s = Z.rsample()
 
-        pose_6D = (past_pose_rotmat.reshape(bs, 5, 55, 3, 3))[:,:,:,:,:2]
-        pose_6D = pose_6D.reshape(bs, 5, 55, 6)
-        pose_6D = pose_6D.reshape(bs, 5, 55 * 6)
-        pose_6D = pose_6D.reshape(bs, 5 * 55 * 6)
-
-        X = torch.cat([pose_6D, past_transl.reshape(bs, 15), cur_verts.reshape(bs, 1200), cur_velocity.reshape(bs, 1200),
-                       cur_dists_to_goal.reshape(bs, 99 * 3), bps_goal.reshape(bs, 1024)], dim=1)
-
-        X0 = self.rb1(X)
-        X = self.rb2(torch.cat([X, X0], dim=1))
-
-        future_pose_6D = self.fc_pose(X)
-        future_transl = self.fc_transl(X)
-        future_verts = self.fc_verts(X)
-        future_dists = self.fc_dist(X)
-
-        future_pose_rotmat = future_pose_6D.reshape(bs, 10, 55 * 6)
-        future_pose_rotmat = CRot2rotmat(future_pose_rotmat).reshape(bs, 10, 1, 55, 9)
-
-        return {'future_pose_delta': future_pose_rotmat,
-                'future_transl_delta': future_transl.reshape(bs, 10, 3),
-                'future_dists_delta': future_dists.reshape(bs, 10, 99, 3),
-                'future_verts_delta': future_verts.reshape(bs, 10, 400, 3)}
+        diff = self.decode(z_s, traj_cond)
+        return traj_cond + diff
 
 
-# Code adapted from https://github.com/mohamedhassanmus/SAMP_Training/blob/main/src/SAMP_models.py
 
-class INet(nn.Module):
-    def __init__(self):
-        super(INet, self).__init__()
-        self.I = nn.Sequential(
-            nn.Linear(1027, 256),
-            nn.ELU(),
-            nn.Linear(256, 256),
-            nn.ELU(),
-            nn.Linear(256, 256),
-            nn.ELU()
+class EncBlock(nn.Module):
+    def __init__(self, nin, nout, downsample=True, kernel=3):
+        super(EncBlock, self).__init__()
+        self.downsample = downsample
+        padding = kernel // 2
+
+        self.main = nn.Sequential(
+            nn.Conv2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=1, padding=padding),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding),
+            nn.LeakyReLU(0.2),
         )
 
-    def forward(self, I):
-        return self.I(I)
-
-
-class GatingNetwork(nn.Module):
-    def __init__(self, input_size=1830, output_size=512, hidden_size=512):
-        super(GatingNetwork, self).__init__()
-        self.input_size = input_size
-        self.output_size = output_size
-        self.hidden_size = hidden_size
-
-        self.gating_network = nn.Sequential(
-            nn.Linear(self.input_size, self.hidden_size),
-            nn.ELU(),
-            nn.Linear(self.hidden_size, self.hidden_size // 2),
-            nn.ELU(),
-            nn.Linear(self.hidden_size // 2, self.output_size),
-            torch.nn.Softmax(dim=1)
-        )
-
-    def forward(self, feature):
-        return self.gating_network(feature)
-
-
-class PredictionNet(nn.Module):
-    def __init__(self, rng, num_experts=6, input_size=1830+256, hidden_size=512, output_size=512, use_cuda=True):
-        super(PredictionNet, self).__init__()
-        self.rng = rng
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-        self.num_experts = num_experts
-        self.use_cuda = use_cuda
-
-        self.w_l1, self.b_l1 = self.init_params(self.num_experts, self.input_size, self.hidden_size)
-        self.w_l2, self.b_l2 = self.init_params(self.num_experts, self.hidden_size, self.hidden_size)
-        self.w_l3, self.b_l3 = self.init_params(self.num_experts, self.hidden_size, self.output_size)
-
-    def init_params(self, num_experts, input_size, output_size):
-        w_bound = np.sqrt(6. / np.prod([input_size, output_size]))
-        w = np.asarray(
-            self.rng.uniform(low=-w_bound, high=w_bound,
-                             size=[num_experts, input_size, output_size]),
-                             dtype=np.float32
-        )
-        if self.use_cuda:
-            w = torch.nn.Parameter(
-                torch.cuda.FloatTensor(w), requires_grad=True)
-            b = torch.nn.Parameter(
-                torch.cuda.FloatTensor(num_experts, output_size).fill_(0),
-                requires_grad=True)
+        if self.downsample:
+            self.pooling = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         else:
-            w = torch.nn.Parameter(
-                torch.FloatTensor(w), requires_grad=True)
-            b = torch.nn.Parameter(
-                torch.FloatTensor(num_experts, output_size).fill_(0),
-                requires_grad=True)
-        return w, b
+            self.pooling = nn.MaxPool2d(kernel_size=(3,3), stride=(2, 1), padding=1)
 
-    def dropout_and_linearlayer(self, inputs, weights, bias):
-        return torch.sum(inputs[..., None] * weights, dim=1) + bias
-
-    def forward(self, frame_prev, I, blending_coef):
-        w_l1 = torch.sum(
-            blending_coef[..., None, None] * self.w_l1[None], dim=1)
-        b_l1 = torch.matmul(blending_coef, self.b_l1)
-
-        w_l2 = torch.sum(
-            blending_coef[..., None, None] * self.w_l2[None], dim=1)
-        b_l2 = torch.matmul(blending_coef, self.b_l2)
-
-        w_l3 = torch.sum(
-            blending_coef[..., None, None] * self.w_l3[None], dim=1)
-        b_l3 = torch.matmul(blending_coef, self.b_l3)
-
-        h0 = torch.concat([frame_prev, I], dim=1)
-
-        h1 = F.elu(self.dropout_and_linearlayer(h0, w_l1, b_l1))
-        h2 = F.elu(self.dropout_and_linearlayer(h1, w_l2, b_l2))
-        h3 = F.elu(self.dropout_and_linearlayer(h2, w_l3, b_l3))
-
-        return h3
+    def forward(self, input):
+        output = self.main(input)
+        output = self.pooling(output)
+        return output
 
 
-class MotionNet(nn.Module):
-    def __init__(self, rng=None, num_experts=6, use_cuda=True):
-        super(MotionNet, self).__init__()
-        self.INet = INet()
-        self.gating_network = GatingNetwork(output_size=num_experts)
-        self.rng = rng
-        self.prediction_net = PredictionNet(self.rng, num_experts=num_experts, use_cuda=use_cuda)
+class DecBlock(nn.Module):
+    def __init__(self, nin, nout, upsample=True, kernel=3):
+        super(DecBlock, self).__init__()
+        self.upsample = upsample
 
-        self.fc_pose = nn.Linear(512, 55*6)
-        self.fc_transl = nn.Linear(512, 3)
-        self.fc_verts = nn.Linear(512, 400*3)
-        self.fc_dists = nn.Linear(512, 99*3)
+        padding = kernel // 2
+        if upsample:
+            self.deconv1 = nn.ConvTranspose2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=2, padding=padding)
+        else:
+            self.deconv1 = nn.ConvTranspose2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=(2, 1), padding=padding)
+        self.deconv2 = nn.ConvTranspose2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding)
+        self.leaky_relu = nn.LeakyReLU(0.2)
 
-    def forward(self, past_pose_rotmat, past_transl, cur_verts, cur_dists_to_goal, bps_goal, obj_goal_transl, **kwargs):
-        '''
-        :param past_pose_rotmat: (N, 1, 55, 9)
-        :param past_transl: (N, 3)
-        :param cur_velocity: (N, 400, 3)
-        :param cur_verts: (N, 400, 3)
-        :param cur_dists_to_goal: (N, 99, 3)
-        :param bps_goal: (N, 1024)
-        :param obj_goal_transl: (N, 3)
-        :param kwargs:
-        :return:
-        '''
-        bs = past_pose_rotmat.shape[0]
+    def forward(self, input, out_size):
+        output = self.deconv1(input, output_size=out_size)
+        output = self.leaky_relu(output)
+        output = self.leaky_relu(self.deconv2(output))
+        return output
 
-        pose_6D = (past_pose_rotmat.reshape(bs, 1, 55, 3, 3))[:,:,:,:,:2]
-        pose_6D = pose_6D.reshape(bs, 55*6)
-        frame_prev = torch.concat([pose_6D, past_transl, cur_verts.flatten(start_dim=1), cur_dists_to_goal.flatten(start_dim=1)], dim=1)
-        I = torch.concat([bps_goal, obj_goal_transl.to(torch.float32)], dim=1)
 
-        I = self.INet(I)
-        omega = self.gating_network(frame_prev)
-        Y = self.prediction_net(frame_prev, I, omega)
+class DecBlock_output(nn.Module):
+    def __init__(self, nin, nout, upsample=True, kernel=3):
+        super(DecBlock_output, self).__init__()
+        self.upsample = upsample
+        padding = kernel // 2
 
-        future_pose_6D = self.fc_pose(Y)
-        future_transl = self.fc_transl(Y)
-        future_verts = self.fc_verts(Y)
-        future_dists = self.fc_dists(Y)
+        if upsample:
+            self.deconv1 = nn.ConvTranspose2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=2, padding=padding)
+        else:
+            self.deconv1 = nn.ConvTranspose2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=(2, 1), padding=padding)
+        self.deconv2 = nn.ConvTranspose2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding)
+        self.leaky_relu = nn.LeakyReLU(0.2)
 
-        future_pose_rotmat = future_pose_6D.reshape(bs, 1, 55 * 6)
-        future_pose_rotmat = CRot2rotmat(future_pose_rotmat).reshape(bs, 1, 55, 9)
 
-        return {
-            'future_pose': future_pose_rotmat,
-            'future_transl': future_transl,
-            'future_dists': future_dists.reshape(bs, 99, 3),
-            'future_verts': future_verts.reshape(bs, 400, 3)
-        }
+    def forward(self, input, out_size):
+        output = self.deconv1(input, output_size=out_size)
+        output = self.leaky_relu(output)
+        output = self.deconv2(output)
+        return output
 
 
 
+class LocalMotionFill(nn.Module):
+    def __init__(self, downsample=True, in_channel=4, out_channel=4, kernel=3, latentD=1024, **kwargs):
+        super(LocalMotionFill, self).__init__()
+        self.enc_blc1 = EncBlock(nin=in_channel, nout=32, downsample=downsample, kernel=kernel)
+        self.enc_blc2 = EncBlock(nin=32, nout=64, downsample=downsample, kernel=kernel)
+        self.enc_blc3 = EncBlock(nin=64, nout=128, downsample=downsample, kernel=kernel)
+        self.enc_blc4 = EncBlock(nin=128, nout=256, downsample=downsample, kernel=kernel)
+        self.enc_blc5 = EncBlock(nin=256, nout=256, downsample=downsample, kernel=kernel)
+
+        self.dec_blc1 = DecBlock(nin=256, nout=256, upsample=downsample, kernel=kernel)
+        self.dec_blc2 = DecBlock(nin=256, nout=128, upsample=downsample, kernel=kernel)
+        self.dec_blc3 = DecBlock(nin=128, nout=64, upsample=downsample, kernel=kernel)
+        self.dec_blc4 = DecBlock(nin=64, nout=32, upsample=downsample, kernel=kernel)
+        self.dec_blc5 = DecBlock_output(nin=32, nout=out_channel, upsample=downsample, kernel=kernel)
+
+        self.enc_mu = nn.Linear(latentD, latentD)
+        self.enc_var = nn.Linear(latentD, latentD)
+
+        self.rb1 = ResBlock(25600, latentD, n_neurons=latentD)
+        self.rb2 = ResBlock(latentD, latentD, n_neurons=latentD)
+
+        self.rb3 = ResBlock(13824, latentD, n_neurons=latentD)
+        self.rb4 = ResBlock(latentD, 12800, n_neurons=latentD)
+
+    def decode(self, Zs, I_cond, **kwargs):
+        X_cond = self.enc_blc1(I_cond)
+        X_cond = self.enc_blc2(X_cond)
+        X_cond = self.enc_blc3(X_cond)
+        X_cond = self.enc_blc4(X_cond)
+
+        feature = X_cond.flatten(start_dim=1)
+        feature = torch.cat([feature, Zs], dim=1)
+
+        X = self.rb3(feature)
+        X = self.rb4(X)
+        X = X.reshape(X.shape[0], 256, 10, 5)
+
+        x_up4 = self.dec_blc1(X, X4.size())
+        x_up3 = self.dec_blc2(x_up4, X3.size())
+        x_up2 = self.dec_blc3(x_up3, X2.size())
+        x_up1 = self.dec_blc4(x_up2, X1.size())
+        output = self.dec_blc5(x_up1, I.size())
+
+        return output
+
+
+    def forward(self, I, I_cond, **kwargs):
+        X1 = self.enc_blc1(I)
+        X2 = self.enc_blc2(X1)
+        X3 = self.enc_blc3(X2)
+        X4 = self.enc_blc4(X3)
+        X5 = self.enc_blc5(X4)
+
+        X_cond = self.enc_blc1(I_cond)
+        X_cond = self.enc_blc2(X_cond)
+        X_cond = self.enc_blc3(X_cond)
+        X_cond = self.enc_blc4(X_cond)
+        X_cond = self.enc_blc5(X_cond)
+
+        feature = torch.cat([X5, X_cond], dim=1)
+        feature = feature.flatten(start_dim=1)
+
+        Z = self.rb1(feature)
+        Z = self.rb2(Z)
+
+        Z = torch.distributions.normal.Normal(self.enc_mu(Z), F.softplus(self.enc_var(Z)))
+        z_x = Z.rsample()
+
+        feature = X_cond.flatten(start_dim=1)
+        feature = torch.cat([feature, z_x], dim=1)
+
+        X = self.rb3(feature)
+        X = self.rb4(X)
+        X = X.reshape(X.shape[0], 256, 10, 5)
+
+        x_up4 = self.dec_blc1(X, X4.size())
+        x_up3 = self.dec_blc2(x_up4, X3.size())
+        x_up2 = self.dec_blc3(x_up3, X2.size())
+        x_up1 = self.dec_blc4(x_up2, X1.size())
+        output = self.dec_blc5(x_up1, I.size())
+
+        return output
 
 
 
