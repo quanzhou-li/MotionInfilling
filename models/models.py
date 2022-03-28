@@ -250,33 +250,25 @@ class LocalMotionFill(nn.Module):
         self.dec_blc4 = DecBlock(nin=64, nout=32, upsample=downsample, kernel=kernel)
         self.dec_blc5 = DecBlock_output(nin=32, nout=out_channel, upsample=downsample, kernel=kernel)
 
-        self.enc_mu = nn.Linear(latentD, latentD)
-        self.enc_var = nn.Linear(latentD, latentD)
-
-        self.rb1 = ResBlock(25600, latentD, n_neurons=latentD)
-        self.rb2 = ResBlock(latentD, latentD, n_neurons=latentD)
-
-        self.rb3 = ResBlock(13824, latentD, n_neurons=latentD)
-        self.rb4 = ResBlock(latentD, 12800, n_neurons=latentD)
+        self.conv_mu = nn.Conv2d(512, 256, 3, 1, 1)
+        self.conv_var = nn.Conv2d(512, 256, 3, 1, 1)
+        self.conv_dec = nn.Conv2d(512, 256, 3, 1, 1)
 
     def decode(self, Zs, I_cond, **kwargs):
-        X_cond = self.enc_blc1(I_cond)
-        X_cond = self.enc_blc2(X_cond)
-        X_cond = self.enc_blc3(X_cond)
-        X_cond = self.enc_blc4(X_cond)
+        X1 = self.enc_blc1(I_cond)
+        X2 = self.enc_blc2(X1)
+        X3 = self.enc_blc3(X2)
+        X4 = self.enc_blc4(X3)
+        X5 = self.enc_blc5(X4)
 
-        feature = X_cond.flatten(start_dim=1)
-        feature = torch.cat([feature, Zs], dim=1)
-
-        X = self.rb3(feature)
-        X = self.rb4(X)
-        X = X.reshape(X.shape[0], 256, 10, 5)
+        X = torch.cat([X5, Zs], dim=1)
+        X = self.conv_dec(X)
 
         x_up4 = self.dec_blc1(X, X4.size())
         x_up3 = self.dec_blc2(x_up4, X3.size())
         x_up2 = self.dec_blc3(x_up3, X2.size())
         x_up1 = self.dec_blc4(x_up2, X1.size())
-        output = self.dec_blc5(x_up1, I.size())
+        output = self.dec_blc5(x_up1, I_cond.size())
 
         return output
 
@@ -295,20 +287,14 @@ class LocalMotionFill(nn.Module):
         X_cond = self.enc_blc5(X_cond)
 
         feature = torch.cat([X5, X_cond], dim=1)
-        feature = feature.flatten(start_dim=1)
+        mean = self.conv_mu(feature)
+        std = self.conv_var(feature)
 
-        Z = self.rb1(feature)
-        Z = self.rb2(Z)
+        Z = torch.distributions.normal.Normal(mean, F.softplus(std))
+        z_s = Z.rsample()
 
-        Z = torch.distributions.normal.Normal(self.enc_mu(Z), F.softplus(self.enc_var(Z)))
-        z_x = Z.rsample()
-
-        feature = X_cond.flatten(start_dim=1)
-        feature = torch.cat([feature, z_x], dim=1)
-
-        X = self.rb3(feature)
-        X = self.rb4(X)
-        X = X.reshape(X.shape[0], 256, 10, 5)
+        X = torch.cat([X_cond, z_s], dim=1)
+        X = self.conv_dec(X)
 
         x_up4 = self.dec_blc1(X, X4.size())
         x_up3 = self.dec_blc2(x_up4, X3.size())
@@ -324,6 +310,9 @@ class MotionFill(nn.Module):
         super(MotionFill, self).__init__()
         self.trajNet = TrajFill()
         self.localMotionNet = LocalMotionFill()
+
+    def decode(self, Zs, I_cond, **kwargs):
+        return self.localMotionNet.decode(Zs, I_cond)
 
     def forward(self, I, I_cond, traj, traj_cond, **kwargs):
         predict_traj, mean_traj, std_traj = self.trajNet(traj, traj_cond)
