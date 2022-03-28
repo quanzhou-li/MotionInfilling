@@ -319,4 +319,18 @@ class LocalMotionFill(nn.Module):
         return output
 
 
+class MotionFill(nn.Module):
+    def __init__(self, **kwargs):
+        super(MotionFill, self).__init__()
+        self.trajNet = TrajFill()
+        self.localMotionNet = LocalMotionFill()
+
+    def forward(self, I, I_cond, traj, traj_cond, **kwargs):
+        predict_traj = self.trajNet(traj, traj_cond)
+        predict_I = self.localMotionNet(I, I_cond)
+
+        return {
+            'traj': predict_traj,
+            'I': predict_I
+        }
 
