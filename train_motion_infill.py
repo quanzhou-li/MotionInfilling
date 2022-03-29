@@ -26,6 +26,9 @@ if __name__=='__main__':
     parser.add_argument('--n-workers', default=8, type=int,
                         help='Number of PyTorch dataloader workers')
 
+    parser.add_argument('--n-epochs', default=200, type=int,
+                        help='Number of epochs')
+
     parser.add_argument('--lr', default=5e-4, type=float,
                         help='Training learning rate')
 
@@ -46,6 +49,7 @@ if __name__=='__main__':
     batch_size = args.batch_size
     base_lr = args.lr
     kl_coef = args.kl_coef
+    n_epochs = args.n_epochs
 
     cfg = {
         'work_dir': work_dir,
@@ -58,7 +62,7 @@ if __name__=='__main__':
         'dataset_dir': data_path,
         'expr_ID': expr_ID,
         'base_lr': base_lr,
-        'n_epochs': 400,
+        'n_epochs': n_epochs,
         'save_every_it': 10,
         'best_motionFill': None,
         'try_num': 0,

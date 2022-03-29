@@ -212,6 +212,8 @@ class Trainer:
 
                     else:
                         self.logger(eval_msg)
+                        if self.epochs_completed % 3 == 0:
+                            self.save_motionFill()
 
                     self.swriter.add_scalars('total_loss_motionFill/scalars',
                                              {'train_loss_total': train_loss_dict_motionFill['loss_total'],
