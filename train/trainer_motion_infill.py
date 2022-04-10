@@ -76,9 +76,7 @@ class Trainer:
 
         for it, data in enumerate(self.ds_train):
             data = {k: data[k].to(self.device) for k in data.keys()}
-
             self.optimizer_motioinFill.zero_grad()
-
             drec_motionFill = self.motionFill(**data)
             loss_total_motionFill, cur_loss_dict_motionFill = self.loss_motionFill(data, drec_motionFill)
 
@@ -86,7 +84,7 @@ class Trainer:
             self.optimizer_motioinFill.step()
 
             train_loss_dict_motionFill = {k: train_loss_dict_motionFill.get(k, 0.0) + v.item() for k, v in cur_loss_dict_motionFill.items()}
-            if it % (self.cfg.save_every_it + 1) == 0:
+            if it % (self.cfg.save_every_it - 1) == 0:
                 cur_train_loss_dict_motionFill = {k: v / (it + 1) for k, v in train_loss_dict_motionFill.items()}
                 train_msg = self.create_loss_message(cur_train_loss_dict_motionFill,
                                                     expr_ID=self.cfg.expr_ID,
@@ -100,6 +98,24 @@ class Trainer:
 
         train_loss_dict_motionFill = {k: v / len(self.ds_train) for k, v in train_loss_dict_motionFill.items()}
         return train_loss_dict_motionFill
+
+    def evaluate(self):
+        self.motionFill.eval()
+
+        eval_loss_dict_motionFill = {}
+
+        dataset = self.ds_train
+
+        with torch.no_grad():
+            for it, data in enumerate(dataset):
+                data = {k: data[k].to(self.device) for k in data.keys()}
+                drec_motionFill = self.motionFill(**data)
+                loss_total_motionFill, cur_loss_dict_motionFill = self.loss_motionFill(data, drec_motionFill)
+                eval_loss_dict_motionFill = {k: eval_loss_dict_motionFill.get(k, 0.0) + v.item() for k, v in cur_loss_dict_motionFill.items()}
+
+            eval_loss_dict_motionFill = {k: v / len(dataset) for k, v in eval_loss_dict_motionFill.items()}
+
+        return eval_loss_dict_motionFill
 
     def loss_motionFill(self, data, drec):
         bs = data['traj'].shape[0]
@@ -151,24 +167,6 @@ class Trainer:
         loss_dict['loss_total'] = loss_total
 
         return loss_total, loss_dict
-
-    def evaluate(self):
-        self.motionFill.eval()
-
-        eval_loss_dict_motionFill = {}
-
-        dataset = self.ds_val
-
-        with torch.no_grad():
-            for data in dataset:
-                data = {k: data[k].to(self.device) for k in data.keys()}
-                drec_motionFill = self.motionFill(**data)
-                loss_total_motionFill, cur_loss_dict_motionFill = self.loss_motionFill(data, drec_motionFill)
-                eval_loss_dict_motionFill = {k: eval_loss_dict_motionFill.get(k, 0.0) + v.item() for k, v in cur_loss_dict_motionFill.items()}
-
-            eval_loss_dict_motionFill = {k: v / len(dataset) for k, v in eval_loss_dict_motionFill.items()}
-
-        return eval_loss_dict_motionFill
 
     def fit(self, n_epochs=None):
         starttime = datetime.now().replace(microsecond=0)
