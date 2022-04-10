@@ -282,7 +282,11 @@ class LocalMotionFill(nn.Module):
         return Z
 
     def decode(self, Zs, I_cond, **kwargs):
-        X5 = self.CNN_feature(I_cond)
+        X1 = self.enc_blc1(I_cond)
+        X2 = self.enc_blc2(X1)
+        X3 = self.enc_blc3(X2)
+        X4 = self.enc_blc4(X3)
+        X5 = self.enc_blc5(X4)
         X = torch.cat([X5, Zs], dim=1)
         X = self.BN(self.conv_dec(X))
 
