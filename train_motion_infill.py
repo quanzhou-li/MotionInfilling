@@ -32,6 +32,9 @@ if __name__=='__main__':
     parser.add_argument('--train-data', default='train_data', type=str,
                         help='Name of the training set')
 
+    parser.add_argument('--val-data', default='val_data', type=str,
+                        help='Name of the validation set')
+
     parser.add_argument('--lr', default=5e-4, type=float,
                         help='Training learning rate')
 
@@ -54,11 +57,12 @@ if __name__=='__main__':
     kl_coef = args.kl_coef
     n_epochs = args.n_epochs
     ds_train = args.train_data
+    ds_val = args.val_data
 
     cfg = {
         'work_dir': work_dir,
         'ds_train': ds_train,
-        'ds_val': 'val_data',
+        'ds_val': ds_val,
         'batch_size': batch_size,
         'n_workers': n_workers,
         'use_multigpu': use_multigpu,
