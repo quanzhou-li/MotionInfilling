@@ -262,13 +262,27 @@ class LocalMotionFill(nn.Module):
 
         self.BN = nn.BatchNorm2d(256)
 
-    def decode(self, Zs, I_cond, **kwargs):
-        X1 = self.enc_blc1(I_cond)
+    def CNN_feature(self, X):
+        X1 = self.enc_blc1(X)
         X2 = self.enc_blc2(X1)
         X3 = self.enc_blc3(X2)
         X4 = self.enc_blc4(X3)
         X5 = self.enc_blc5(X4)
+        return X5
 
+    def encode(self, I, I_cond, **kwargs):
+        X5 = self.CNN_feature(I)
+        X_cond = self.CNN_feature(I_cond)
+
+        feature = torch.cat([X5, X_cond], dim=1)
+        mean = self.conv_mu(feature)
+        std = self.conv_var(feature)
+
+        Z = torch.distributions.normal.Normal(mean, F.softplus(std))
+        return Z
+
+    def decode(self, Zs, I_cond, **kwargs):
+        X5 = self.CNN_feature(I_cond)
         X = torch.cat([X5, Zs], dim=1)
         X = self.BN(self.conv_dec(X))
 
@@ -282,34 +296,10 @@ class LocalMotionFill(nn.Module):
 
 
     def forward(self, I, I_cond, **kwargs):
-        X1 = self.enc_blc1(I)
-        X2 = self.enc_blc2(X1)
-        X3 = self.enc_blc3(X2)
-        X4 = self.enc_blc4(X3)
-        X5 = self.enc_blc5(X4)
-
-        X_cond = self.enc_blc1(I_cond)
-        X_cond = self.enc_blc2(X_cond)
-        X_cond = self.enc_blc3(X_cond)
-        X_cond = self.enc_blc4(X_cond)
-        X_cond = self.enc_blc5(X_cond)
-
-        feature = torch.cat([X5, X_cond], dim=1)
-        mean = self.conv_mu(feature)
-        std = self.conv_var(feature)
-
-        Z = torch.distributions.normal.Normal(mean, F.softplus(std))
+        Z = self.encode(I, I_cond)
         z_s = Z.rsample()
 
-        X = torch.cat([X_cond, z_s], dim=1)
-        X = self.BN(self.conv_dec(X))
-
-        x_up4 = self.dec_blc1(X, X4.size())
-        x_up3 = self.dec_blc2(x_up4, X3.size())
-        x_up2 = self.dec_blc3(x_up3, X2.size())
-        x_up1 = self.dec_blc4(x_up2, X1.size())
-        output = self.dec_blc5(x_up1, I.size())
-
+        output = self.decode(z_s, I_cond)
         return output, Z.mean, Z.scale
 
 
