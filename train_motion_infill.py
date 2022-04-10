@@ -29,6 +29,9 @@ if __name__=='__main__':
     parser.add_argument('--n-epochs', default=200, type=int,
                         help='Number of epochs')
 
+    parser.add_argument('--train-data', default='train_data', type=str,
+                        help='Name of the training set')
+
     parser.add_argument('--lr', default=5e-4, type=float,
                         help='Training learning rate')
 
@@ -50,10 +53,11 @@ if __name__=='__main__':
     base_lr = args.lr
     kl_coef = args.kl_coef
     n_epochs = args.n_epochs
+    ds_train = args.train_data
 
     cfg = {
         'work_dir': work_dir,
-        'ds_train': 'train_data',
+        'ds_train': ds_train,
         'ds_val': 'val_data',
         'batch_size': batch_size,
         'n_workers': n_workers,
