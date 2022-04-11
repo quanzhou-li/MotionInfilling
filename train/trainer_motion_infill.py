@@ -100,8 +100,8 @@ class Trainer:
         return train_loss_dict_motionFill
 
     def evaluate(self):
-        # self.motionFill.eval()
-        self.motionFill.train()
+        self.motionFill.eval()
+        # self.motionFill.train()
 
         eval_loss_dict_motionFill = {}
 
