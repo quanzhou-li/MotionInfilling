@@ -260,7 +260,7 @@ class LocalMotionFill(nn.Module):
         self.conv_var = nn.Conv2d(512, 256, 3, 1, 1)
         self.conv_dec = nn.Conv2d(512, 256, 3, 1, 1)
 
-        self.BN = nn.BatchNorm2d(256, momentum=0.3)
+        self.BN = nn.BatchNorm2d(256, momentum=0.7)
 
     def CNN_feature(self, X):
         X1 = self.enc_blc1(X)
