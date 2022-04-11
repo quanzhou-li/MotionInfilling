@@ -177,10 +177,10 @@ class EncBlock(nn.Module):
 
         self.main = nn.Sequential(
             nn.Conv2d(in_channels=nin, out_channels=nout, kernel_size=kernel, stride=1, padding=padding),
-            nn.BatchNorm2d(nout),
+            nn.BatchNorm2d(nout, track_running_stats=False),
             nn.LeakyReLU(0.2),
             nn.Conv2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding),
-            nn.BatchNorm2d(nout),
+            nn.BatchNorm2d(nout, track_running_stats=False),
             nn.LeakyReLU(0.2),
         )
 
@@ -208,8 +208,8 @@ class DecBlock(nn.Module):
         self.deconv2 = nn.ConvTranspose2d(in_channels=nout, out_channels=nout, kernel_size=kernel, stride=1, padding=padding)
         self.leaky_relu = nn.LeakyReLU(0.2)
 
-        self.BN1 = nn.BatchNorm2d(nout)
-        self.BN2 = nn.BatchNorm2d(nout)
+        self.BN1 = nn.BatchNorm2d(nout, track_running_stats=False)
+        self.BN2 = nn.BatchNorm2d(nout, track_running_stats=False)
 
     def forward(self, input, out_size):
         output = self.deconv1(input, output_size=out_size)
