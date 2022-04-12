@@ -120,6 +120,7 @@ def render_img(cfg):
     Zs_I = dist_I.rsample().float()
     I_predict = motionFill.decode(Zs_I, I_cond)
     I_prime = np.transpose(to_cpu(I_predict), (0, 3, 2, 1))
+    I0 = np.transpose(to_cpu(I), (0, 3, 2, 1))
     marker_location = I_prime[0, :, :, 0].reshape(T, P)[:, :L]
 
 
