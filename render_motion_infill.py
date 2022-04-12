@@ -108,9 +108,9 @@ def render_img(cfg):
     L = len(data['verts_markers'][0].flatten())
     I_cond[0, :L, 0] = data['verts_markers'][0].flatten()
     I_cond[-1, :L, 0] = data['verts_markers'][-1].flatten()
-    # I2to4_cond = np.tile(velocity_predict.detach().numpy(), (1, P)).reshape(T, P, 3)
-    # I_cond[:, :, 1:] = I2to4_cond
-    I_cond[:, :, 1:] = I2to4
+    I2to4_cond = np.tile(velocity_predict.detach().numpy(), (1, P)).reshape(T, P, 3)
+    I_cond[:, :, 1:] = I2to4_cond
+    # I_cond[:, :, 1:] = I2to4
     I_cond = np.transpose(I_cond, (2, 1, 0))
     I_cond = torch.tensor(np.expand_dims(I_cond, axis=0)).float()
     dist_I = torch.distributions.normal.Normal(
