@@ -135,6 +135,9 @@ class Trainer:
         ### foot ground contact loss
         loss_fg_contact = 60. * (1. - self.cfg.kl_coef) * self.LossL2(data['I'][:, 0, -8:, :], drec['I'][:, 0, -8:, :])
 
+        ### Smooth loss (test)
+        loss_smooth = 30. * (1. - self.cfg.kl_coef) * self.LossL2(data['I'][:, 0, :-8, 1:]-data['I'][:, 0, :-8, :-1], drec['I'][:, 0, :-8, 1:] - drec['I'][:, 0, :-8, :-1])
+
         ### KL loss traj
         q_z_traj = torch.distributions.normal.Normal(drec['mean_traj'], drec['std_traj'])
         p_z_traj = torch.distributions.normal.Normal(
@@ -161,7 +164,8 @@ class Trainer:
             'loss_m_velocity': loss_m_velocity,
             'loss_fg_contact': loss_fg_contact,
             'loss_kl_traj': loss_kl_traj,
-            'loss_kl_local': loss_kl_local
+            'loss_kl_local': loss_kl_local,
+            'loss_smooth': loss_smooth
         }
 
         loss_total = torch.stack(list(loss_dict.values())).sum()
