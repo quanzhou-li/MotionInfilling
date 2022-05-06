@@ -40,6 +40,16 @@ def get_interpolated_roots(N, startFrame, FrameT):
     return res
 
 
+def smooth_sequence(T, sequence):
+    smoothed = sequence.copy()
+    smoothed[0] = (smoothed[0]+smoothed[1]) / 2
+    for i in range(1, T-1):
+        smoothed[i] = (smoothed[i-1]+smoothed[i]+smoothed[i+1]) / 3
+    smoothed[T-1] = (smoothed[T-2]+smoothed[T-1]) / 2
+    return smoothed
+
+
+
 def render_img(cfg):
     motionFill = MotionFill().to(device)
     motionFill.load_state_dict(torch.load(cfg.model_path, map_location=torch.device('cpu')))
@@ -102,6 +112,8 @@ def render_img(cfg):
         fullpose_6D = I_prime[:, :, 0][:, :L]
     else:
         fullpose_6D = ((np.transpose(to_cpu(I), (0, 3, 2, 1)))[0])[:, :, 0][:, :L]
+    fullpose_6D = smooth_sequence(T, fullpose_6D)
+    traj = torch.tensor(smooth_sequence(T, traj.detach().numpy()))
     fullpose_rotmat = torch.zeros((T, 55, 3, 3))
     for i in range(T):
         fullpose_rotmat[i] = CRot2rotmat(torch.tensor(fullpose_6D[i]))
