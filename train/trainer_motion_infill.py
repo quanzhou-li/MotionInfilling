@@ -136,7 +136,7 @@ class Trainer:
         loss_fg_contact = 60. * (1. - self.cfg.kl_coef) * self.LossL2(data['I'][:, 0, -8:, :], drec['I'][:, 0, -8:, :])
 
         ### Smooth loss (test)
-        loss_smooth = 30. * (1. - self.cfg.kl_coef) * self.LossL2(data['I'][:, 0, :-8, 1:]-data['I'][:, 0, :-8, :-1], drec['I'][:, 0, :-8, 1:] - drec['I'][:, 0, :-8, :-1])
+        loss_smooth = 90. * (1. - self.cfg.kl_coef) * self.LossL2(data['I'][:, 0, :-8, 1:]-data['I'][:, 0, :-8, :-1], drec['I'][:, 0, :-8, 1:] - drec['I'][:, 0, :-8, :-1])
 
         ### KL loss traj
         q_z_traj = torch.distributions.normal.Normal(drec['mean_traj'], drec['std_traj'])
