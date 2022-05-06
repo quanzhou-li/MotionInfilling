@@ -137,6 +137,7 @@ class Trainer:
 
         ### Smooth loss (test)
         loss_smooth = 90. * (1. - self.cfg.kl_coef) * self.LossL2(data['I'][:, 0, :-8, 1:]-data['I'][:, 0, :-8, :-1], drec['I'][:, 0, :-8, 1:] - drec['I'][:, 0, :-8, :-1])
+        print(0.5 * (1. - self.cfg.kl_coef) * torch.norm(data['I'][:, 0, :-8, 1:] - data['I'][:, 0, :-8, :-1]))
         loss_smooth_drec = 0.5 * (1. - self.cfg.kl_coef) * torch.norm(drec['I'][:, 0, :-8, 1:] - drec['I'][:, 0, :-8, :-1])
 
         ### KL loss traj
