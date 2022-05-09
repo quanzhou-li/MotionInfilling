@@ -56,7 +56,7 @@ def render_img(cfg):
     motionFill.eval()
 
     gnet = GNet().to(device)
-    gnet.load_state_dict(torch.load(cfg.gnet_path))
+    gnet.load_state_dict(torch.load(cfg.gnet_path, map_location=torch.device('cpu')))
     gnet.eval()
 
     mv = MeshViewer(offscreen=True)
